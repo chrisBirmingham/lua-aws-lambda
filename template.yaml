@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Example AWS lambda written in Lua"
+
+Transform:
+- AWS::Serverless-2016-10-31
+
+Resources:
+
+  helloFromLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lua
+      CodeUri: app
+      Runtime: "provided.al2023"
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 100
+      Description: A Lambda function that returns a static string.
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Layers:
+        - !Ref RuntimeLayer
+    Metadata:
+      BuildMethod: makefile
+
+  RuntimeLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleArchitectures:
+        - "x86_64"
+      CompatibleRuntimes:
+        - "provided.al2023"
+      ContentUri: runtime_layer
+      Description: "Lua 5.4 custom lambda runtime"
+      LayerName: "lua-lambda-runtime"
+    Metadata:
+      BuildMethod: makefile

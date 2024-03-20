@@ -1,0 +1,60 @@
+#!/opt/bin/lua
+
+package.path = package.path .. ";/opt/share/lua/5.4/?.lua"
+package.cpath = package.cpath .. ";/opt/lib/lua/5.4/?.so"
+
+local http = require('socket.http')
+local ltn12 = require('ltn12')
+local json = require('lunajson')
+local os = os
+local string = string
+
+local runtime_api_version = '2018-06-01'
+local runtime_api = os.getenv('AWS_LAMBDA_RUNTIME_API')
+local task_root = os.getenv('LAMBDA_TASK_ROOT')
+local handler = os.getenv('_HANDLER')
+
+local app = dofile(task_root .. '/' .. handler)
+
+function get_request()
+    local url = 'http://' .. runtime_api .. '/' .. runtime_api_version .. '/runtime/invocation/next'
+    local body, status, headers = http.request(url)
+    return json.decode(body), headers['lambda-runtime-aws-request-id']
+end
+
+function get_response_url(status, request_id)
+    local section = status and "response" or "error" 
+    return 'http://' .. runtime_api .. '/' .. runtime_api_version .. '/runtime/invocation/' .. request_id .. '/' .. section
+end
+
+function send_response(url, response, request_id)
+    local json_response = json.encode(response)
+    
+    http.request{
+        url=url,
+        method='POST',
+        source=ltn12.source.string(json_response),
+        headers={
+            ['content-length']=string.len(json_response),
+            ['content-type']='application/json'
+        }
+    }
+end
+
+function process_request()
+    local event, request_id = get_request()
+    local status, lambda_response = pcall(app.handler, event)
+    local url = get_response_url(status, request_id)
+
+    if not status then
+        lambda_response = {
+            errorMessage=lambda_response
+        }
+    end
+
+    send_response(url, lambda_response, request_id)
+end
+
+while true do
+    process_request()
+end
